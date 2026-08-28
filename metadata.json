@@ -1,0 +1,6 @@
+{
+  "name": "GameHub TV",
+  "description": "Production TV console launcher and WebRTC game display receiver for GameHub, powering TV gaming with mobile phone engine and controller.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
