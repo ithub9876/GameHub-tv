@@ -215,43 +215,35 @@ export default function App() {
 
       onNavCommand: (payload: any) => {
         if (!payload) return;
-        const raw =
-          typeof payload === 'string'
-            ? payload
-            : payload.direction ||
-              payload.command ||
-              payload.action ||
-              payload.key ||
-              payload.type ||
-              '';
-        const cmd = String(raw).toUpperCase().trim();
-        if (cmd === 'UP' || cmd === 'ARROWUP' || cmd === 'DPAD_UP' || cmd === 'MOVE_UP') {
+        const keyMap: Record<string, string> = {
+          UP: 'ArrowUp',
+          DOWN: 'ArrowDown',
+          LEFT: 'ArrowLeft',
+          RIGHT: 'ArrowRight',
+          SELECT: 'Enter',
+          BACK: 'Escape',
+        };
+
+        const actionKey = typeof payload === 'string' ? payload.toUpperCase().trim() : (payload.action || payload.command || payload.direction || '');
+        const key = keyMap[payload.action] || keyMap[String(actionKey).toUpperCase().trim()] || payload.key;
+        if (key) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+          return;
+        }
+
+        // Additional direction / action fallbacks
+        const cmd = String(actionKey).toUpperCase().trim();
+        if (cmd === 'ARROWUP' || cmd === 'DPAD_UP' || cmd === 'MOVE_UP') {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-        } else if (cmd === 'DOWN' || cmd === 'ARROWDOWN' || cmd === 'DPAD_DOWN' || cmd === 'MOVE_DOWN') {
+        } else if (cmd === 'ARROWDOWN' || cmd === 'DPAD_DOWN' || cmd === 'MOVE_DOWN') {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-        } else if (cmd === 'LEFT' || cmd === 'ARROWLEFT' || cmd === 'DPAD_LEFT' || cmd === 'MOVE_LEFT') {
+        } else if (cmd === 'ARROWLEFT' || cmd === 'DPAD_LEFT' || cmd === 'MOVE_LEFT') {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
-        } else if (cmd === 'RIGHT' || cmd === 'ARROWRIGHT' || cmd === 'DPAD_RIGHT' || cmd === 'MOVE_RIGHT') {
+        } else if (cmd === 'ARROWRIGHT' || cmd === 'DPAD_RIGHT' || cmd === 'MOVE_RIGHT') {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-        } else if (
-          cmd === 'SELECT' ||
-          cmd === 'ENTER' ||
-          cmd === 'CONFIRM' ||
-          cmd === 'CLICK' ||
-          cmd === 'A' ||
-          cmd === 'BUTTON_A' ||
-          cmd === 'START' ||
-          cmd === 'OK'
-        ) {
+        } else if (cmd === 'ENTER' || cmd === 'CONFIRM' || cmd === 'CLICK' || cmd === 'A') {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        } else if (
-          cmd === 'BACK' ||
-          cmd === 'ESCAPE' ||
-          cmd === 'CANCEL' ||
-          cmd === 'B' ||
-          cmd === 'BUTTON_B' ||
-          cmd === 'CLOSE'
-        ) {
+        } else if (cmd === 'ESCAPE' || cmd === 'CANCEL' || cmd === 'CLOSE' || cmd === 'B') {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         }
       },
@@ -259,26 +251,32 @@ export default function App() {
       onControllerInput: (input: any) => {
         if (!input) return;
 
-        // 1. Direct string or command payload
-        if (typeof input === 'string') {
-          const s = input.toUpperCase().trim();
-          if (s.includes('UP')) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-          } else if (s.includes('DOWN')) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-          } else if (s.includes('LEFT')) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
-          } else if (s.includes('RIGHT')) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-          } else if (s.includes('ENTER') || s.includes('SELECT') || s === 'A') {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-          } else if (s.includes('BACK') || s.includes('ESCAPE') || s === 'B') {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-          }
-          return;
+        // 1. Phone controller face button press handlers
+        if (input.buttons?.A?.pressed || input.buttons?.A === true || input.buttons?.a?.pressed || input.buttons?.a === true) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        }
+        if (input.buttons?.B?.pressed || input.buttons?.B === true || input.buttons?.b?.pressed || input.buttons?.b === true) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         }
 
-        // 2. Individual button event
+        // 2. D-Pad buttons
+        if (input.buttons && typeof input.buttons === 'object') {
+          const b = input.buttons;
+          if (b.UP?.pressed || b.dpadUp?.pressed || b.dpadUp === true || b.up === true) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+          }
+          if (b.DOWN?.pressed || b.dpadDown?.pressed || b.dpadDown === true || b.down === true) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+          }
+          if (b.LEFT?.pressed || b.dpadLeft?.pressed || b.dpadLeft === true || b.left === true) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+          }
+          if (b.RIGHT?.pressed || b.dpadRight?.pressed || b.dpadRight === true || b.right === true) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+          }
+        }
+
+        // 3. Discrete button event payloads
         if (input.button && input.pressed !== false && input.state !== 'up') {
           const btn = String(input.button).toUpperCase().trim();
           if (btn === 'UP' || btn === 'DPAD_UP' || btn === 'ARROWUP') {
@@ -289,44 +287,14 @@ export default function App() {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
           } else if (btn === 'RIGHT' || btn === 'DPAD_RIGHT' || btn === 'ARROWRIGHT') {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-          } else if (
-            btn === 'A' ||
-            btn === 'BUTTON_A' ||
-            btn === 'SELECT' ||
-            btn === 'START' ||
-            btn === 'ENTER'
-          ) {
+          } else if (btn === 'A' || btn === 'BUTTON_A' || btn === 'SELECT' || btn === 'START') {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
           } else if (btn === 'B' || btn === 'BUTTON_B' || btn === 'BACK' || btn === 'ESCAPE') {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
           }
-          return;
         }
 
-        // 3. Controller state report: buttons dictionary
-        if (input.buttons && typeof input.buttons === 'object') {
-          const b = input.buttons;
-          if (b.dpadUp || b.up || b.ArrowUp || b.DPAD_UP) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-          }
-          if (b.dpadDown || b.down || b.ArrowDown || b.DPAD_DOWN) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-          }
-          if (b.dpadLeft || b.left || b.ArrowLeft || b.DPAD_LEFT) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
-          }
-          if (b.dpadRight || b.right || b.ArrowRight || b.DPAD_RIGHT) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-          }
-          if (b.a || b.A || b.cross || b.south || b.select || b.start || b.enter || b.BUTTON_A) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-          }
-          if (b.b || b.B || b.circle || b.east || b.back || b.escape || b.BUTTON_B) {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-          }
-        }
-
-        // 4. Joystick axes movement
+        // 4. Joystick axes movement for UI navigation
         if (input.axes && typeof input.axes === 'object') {
           const now = Date.now();
           const lx = input.axes.leftStickX ?? input.axes.x ?? 0;

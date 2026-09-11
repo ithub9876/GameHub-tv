@@ -95,17 +95,23 @@ export class SignalingService {
     this.shouldAutoReconnect = true;
     this.setConnectionState('CONNECTING');
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryServer = urlParams.get('server') || urlParams.get('relay');
+    const envServer = (import.meta as any).env?.VITE_SIGNALING_SERVER;
+
     let wsUrl: string;
-    if (new URLSearchParams(window.location.search).get('server')) {
-      const s = new URLSearchParams(window.location.search).get('server')!.replace(/^(wss?:\/\/|https?:\/\/)/, '').replace(/\/ws\/?$/, '');
-      wsUrl = `${window.location.protocol === 'https:' || s.includes('run.app') ? 'wss:' : 'ws:'}//${s}/ws`;
-    } else if ((import.meta as any).env?.VITE_SIGNALING_SERVER) {
-      const env = (import.meta as any).env.VITE_SIGNALING_SERVER;
-      wsUrl = env.startsWith('ws') ? env : `wss://${env}/ws`;
+    if (queryServer) {
+      const cleanHost = queryServer.replace(/^(wss?:\/\/|https?:\/\/)/, '').replace(/\/ws\/?$/, '');
+      const isSecure = window.location.protocol === 'https:' || cleanHost.includes('run.app');
+      wsUrl = `${isSecure ? 'wss:' : 'ws:'}//${cleanHost}/ws`;
+    } else if (envServer) {
+      wsUrl = envServer.startsWith('ws') ? envServer : `wss://${envServer}/ws`;
     } else if (window.location.host.includes('vercel.app')) {
+      // Point to the live Cloud Run WebSocket relay
       wsUrl = 'wss://ais-pre-xazim7c5xk4vujdvayatn7-784984723925.asia-southeast1.run.app/ws';
     } else {
-      wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws`;
     }
 
     try {
@@ -276,12 +282,20 @@ export class SignalingService {
       }
 
       case 'CONTROLLER_INPUT': {
-        this.events.onControllerInput?.((msg as any).input ?? (msg as any).payload ?? msg);
+        if ((msg as any).input) {
+          this.events.onControllerInput?.((msg as any).input);
+        } else {
+          this.events.onControllerInput?.((msg as any).payload ?? msg);
+        }
         break;
       }
 
       case 'NAV_COMMAND': {
-        this.events.onNavCommand?.((msg as any).payload ?? (msg as any).command ?? msg);
+        if ((msg as any).payload) {
+          this.events.onNavCommand?.((msg as any).payload);
+        } else {
+          this.events.onNavCommand?.((msg as any).command ?? msg);
+        }
         break;
       }
 

@@ -225,7 +225,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({
                       TV Code
                     </span>
                     <div className="text-xl font-mono font-black text-blue-400">
-                      {sessionId || 'GH-8492'}
+                      {sessionId || 'Connecting...'}
                     </div>
                   </div>
 
@@ -233,8 +233,8 @@ export const PairingModal: React.FC<PairingModalProps> = ({
                     <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
                       Pairing PIN
                     </span>
-                    <div className="text-xl font-mono font-black text-amber-300">
-                      {pinCode || '4829'}
+                    <div className="text-xl font-mono font-black text-amber-300 tracking-wider">
+                      {pinCode || '----'}
                     </div>
                   </div>
                 </div>
