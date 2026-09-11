@@ -140,6 +140,8 @@ export default function App() {
 
     webrtcRef.current = receiver;
 
+    let lastStickNavTime = 0;
+
     // 2. Instantiate Signaling Service
     const signaling = new SignalingService({
       onRegistered: (data) => {
@@ -209,6 +211,142 @@ export default function App() {
 
       onHeartbeat: (rtt) => {
         setLatencyMs(rtt);
+      },
+
+      onNavCommand: (payload: any) => {
+        if (!payload) return;
+        const raw =
+          typeof payload === 'string'
+            ? payload
+            : payload.direction ||
+              payload.command ||
+              payload.action ||
+              payload.key ||
+              payload.type ||
+              '';
+        const cmd = String(raw).toUpperCase().trim();
+        if (cmd === 'UP' || cmd === 'ARROWUP' || cmd === 'DPAD_UP' || cmd === 'MOVE_UP') {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+        } else if (cmd === 'DOWN' || cmd === 'ARROWDOWN' || cmd === 'DPAD_DOWN' || cmd === 'MOVE_DOWN') {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        } else if (cmd === 'LEFT' || cmd === 'ARROWLEFT' || cmd === 'DPAD_LEFT' || cmd === 'MOVE_LEFT') {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+        } else if (cmd === 'RIGHT' || cmd === 'ARROWRIGHT' || cmd === 'DPAD_RIGHT' || cmd === 'MOVE_RIGHT') {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        } else if (
+          cmd === 'SELECT' ||
+          cmd === 'ENTER' ||
+          cmd === 'CONFIRM' ||
+          cmd === 'CLICK' ||
+          cmd === 'A' ||
+          cmd === 'BUTTON_A' ||
+          cmd === 'START' ||
+          cmd === 'OK'
+        ) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        } else if (
+          cmd === 'BACK' ||
+          cmd === 'ESCAPE' ||
+          cmd === 'CANCEL' ||
+          cmd === 'B' ||
+          cmd === 'BUTTON_B' ||
+          cmd === 'CLOSE'
+        ) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        }
+      },
+
+      onControllerInput: (input: any) => {
+        if (!input) return;
+
+        // 1. Direct string or command payload
+        if (typeof input === 'string') {
+          const s = input.toUpperCase().trim();
+          if (s.includes('UP')) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+          } else if (s.includes('DOWN')) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+          } else if (s.includes('LEFT')) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+          } else if (s.includes('RIGHT')) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+          } else if (s.includes('ENTER') || s.includes('SELECT') || s === 'A') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          } else if (s.includes('BACK') || s.includes('ESCAPE') || s === 'B') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          }
+          return;
+        }
+
+        // 2. Individual button event
+        if (input.button && input.pressed !== false && input.state !== 'up') {
+          const btn = String(input.button).toUpperCase().trim();
+          if (btn === 'UP' || btn === 'DPAD_UP' || btn === 'ARROWUP') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+          } else if (btn === 'DOWN' || btn === 'DPAD_DOWN' || btn === 'ARROWDOWN') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+          } else if (btn === 'LEFT' || btn === 'DPAD_LEFT' || btn === 'ARROWLEFT') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+          } else if (btn === 'RIGHT' || btn === 'DPAD_RIGHT' || btn === 'ARROWRIGHT') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+          } else if (
+            btn === 'A' ||
+            btn === 'BUTTON_A' ||
+            btn === 'SELECT' ||
+            btn === 'START' ||
+            btn === 'ENTER'
+          ) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          } else if (btn === 'B' || btn === 'BUTTON_B' || btn === 'BACK' || btn === 'ESCAPE') {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          }
+          return;
+        }
+
+        // 3. Controller state report: buttons dictionary
+        if (input.buttons && typeof input.buttons === 'object') {
+          const b = input.buttons;
+          if (b.dpadUp || b.up || b.ArrowUp || b.DPAD_UP) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+          }
+          if (b.dpadDown || b.down || b.ArrowDown || b.DPAD_DOWN) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+          }
+          if (b.dpadLeft || b.left || b.ArrowLeft || b.DPAD_LEFT) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+          }
+          if (b.dpadRight || b.right || b.ArrowRight || b.DPAD_RIGHT) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+          }
+          if (b.a || b.A || b.cross || b.south || b.select || b.start || b.enter || b.BUTTON_A) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          }
+          if (b.b || b.B || b.circle || b.east || b.back || b.escape || b.BUTTON_B) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          }
+        }
+
+        // 4. Joystick axes movement
+        if (input.axes && typeof input.axes === 'object') {
+          const now = Date.now();
+          const lx = input.axes.leftStickX ?? input.axes.x ?? 0;
+          const ly = input.axes.leftStickY ?? input.axes.y ?? 0;
+          if (now - lastStickNavTime > 200) {
+            if (ly < -0.5) {
+              lastStickNavTime = now;
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+            } else if (ly > 0.5) {
+              lastStickNavTime = now;
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+            } else if (lx < -0.5) {
+              lastStickNavTime = now;
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+            } else if (lx > 0.5) {
+              lastStickNavTime = now;
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+            }
+          }
+        }
       },
 
       onError: (err) => {

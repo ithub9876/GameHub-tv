@@ -38,6 +38,8 @@ export interface SignalingEvents {
   onHeartbeat: (rttMs: number) => void;
   onConnectionStateChange: (state: SignalingConnectionState) => void;
   onError: (err: { code: string; message: string }) => void;
+  onControllerInput?: (input: any) => void;
+  onNavCommand?: (payload: any) => void;
 }
 
 export class SignalingService {
@@ -93,9 +95,18 @@ export class SignalingService {
     this.shouldAutoReconnect = true;
     this.setConnectionState('CONNECTING');
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
+    let wsUrl: string;
+    if (new URLSearchParams(window.location.search).get('server')) {
+      const s = new URLSearchParams(window.location.search).get('server')!.replace(/^(wss?:\/\/|https?:\/\/)/, '').replace(/\/ws\/?$/, '');
+      wsUrl = `${window.location.protocol === 'https:' || s.includes('run.app') ? 'wss:' : 'ws:'}//${s}/ws`;
+    } else if ((import.meta as any).env?.VITE_SIGNALING_SERVER) {
+      const env = (import.meta as any).env.VITE_SIGNALING_SERVER;
+      wsUrl = env.startsWith('ws') ? env : `wss://${env}/ws`;
+    } else if (window.location.host.includes('vercel.app')) {
+      wsUrl = 'wss://ais-pre-xazim7c5xk4vujdvayatn7-784984723925.asia-southeast1.run.app/ws';
+    } else {
+      wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+    }
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -261,6 +272,16 @@ export class SignalingService {
       case 'HEARTBEAT_PONG': {
         const rtt = Math.round(performance.now() - this.lastPingSentAt);
         this.events.onHeartbeat?.(rtt);
+        break;
+      }
+
+      case 'CONTROLLER_INPUT': {
+        this.events.onControllerInput?.((msg as any).input ?? (msg as any).payload ?? msg);
+        break;
+      }
+
+      case 'NAV_COMMAND': {
+        this.events.onNavCommand?.((msg as any).payload ?? (msg as any).command ?? msg);
         break;
       }
 

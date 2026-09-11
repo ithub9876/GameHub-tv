@@ -108,6 +108,7 @@ export type SignalingMessageType =
   | 'HEARTBEAT_PING'
   | 'HEARTBEAT_PONG'
   | 'CONTROLLER_INPUT'
+  | 'NAV_COMMAND'
   | 'ERROR';
 
 export interface BaseSignalingMessage {
@@ -219,6 +220,13 @@ export interface ControllerInputMessage extends BaseSignalingMessage {
   };
 }
 
+export interface NavCommandMessage extends BaseSignalingMessage {
+  type: 'NAV_COMMAND';
+  payload?: any;
+  command?: string;
+  direction?: string;
+}
+
 export interface DisconnectMessage extends BaseSignalingMessage {
   type: 'DISCONNECT';
   reason?: string;
@@ -247,4 +255,5 @@ export type SignalingMessage =
   | HeartbeatPingMessage
   | HeartbeatPongMessage
   | ControllerInputMessage
+  | NavCommandMessage
   | ProtocolErrorMessage;
