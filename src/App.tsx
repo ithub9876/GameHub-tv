@@ -153,10 +153,12 @@ export default function App() {
         addLog(`TV Registered with session: ${data.sessionId}, PIN: ${data.pinCode}`);
       },
 
-      onPairRequest: ({ deviceInfo: incomingDev, pinCode: incomingPin }) => {
-        addLog(`Incoming pairing request from ${incomingDev.model}`);
-        // Auto-accept valid PIN pairing from mobile
-        signaling.acceptPairing(incomingDev);
+      onPairRequest: (msg: any) => {
+        const pin = msg?.pinCode || '';
+        const sid = msg?.sessionId || '';
+        const model = msg?.deviceInfo?.model || 'Mobile Controller';
+        addLog(`Incoming pairing request from ${model} (PIN: ${pin})`);
+        signaling.acceptPairing(msg.pinCode, msg.sessionId);
       },
 
       onPairAccepted: (dev) => {

@@ -26,8 +26,9 @@ export interface SignalingEvents {
     stunServers: RTCIceServer[];
   }) => void;
   onPairRequest: (data: {
-    deviceInfo: DeviceInfo;
-    pinCode: string;
+    deviceInfo?: DeviceInfo;
+    pinCode?: string;
+    sessionId?: string;
   }) => void;
   onPairAccepted: (deviceInfo: DeviceInfo) => void;
   onMobileDisconnected: (reason?: string) => void;
@@ -101,13 +102,13 @@ export class SignalingService {
 
     let wsUrl: string;
     if (queryServer) {
+      const isSecure = window.location.protocol === 'https:' || queryServer.includes('run.app');
       const cleanHost = queryServer.replace(/^(wss?:\/\/|https?:\/\/)/, '').replace(/\/ws\/?$/, '');
-      const isSecure = window.location.protocol === 'https:' || cleanHost.includes('run.app');
       wsUrl = `${isSecure ? 'wss:' : 'ws:'}//${cleanHost}/ws`;
     } else if (envServer) {
       wsUrl = envServer.startsWith('ws') ? envServer : `wss://${envServer}/ws`;
     } else if (window.location.host.includes('vercel.app')) {
-      // Point to the live Cloud Run WebSocket relay
+      // Point to the live Cloud Run WebSocket relay server
       wsUrl = 'wss://ais-pre-xazim7c5xk4vujdvayatn7-784984723925.asia-southeast1.run.app/ws';
     } else {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -149,16 +150,58 @@ export class SignalingService {
 
       this.ws.onerror = (err) => {
         console.warn('[Signaling] WebSocket error:', err);
+        this.ensureProvisionalSession();
         this.events.onError?.({
           code: 'WS_ERROR',
           message: 'WebSocket connection encountered an error.',
         });
       };
+
+      // Ensure TV immediately gets a valid session and PIN if relay handshake takes time
+      setTimeout(() => {
+        this.ensureProvisionalSession();
+      }, 1800);
     } catch (e) {
       console.error('[Signaling] Error instantiating WebSocket:', e);
+      this.ensureProvisionalSession();
       this.setConnectionState('DISCONNECTED');
       this.scheduleReconnect();
     }
+  }
+
+  /**
+   * Generates a local provisional session and PIN to ensure the TV screen
+   * never stays stuck on "Connecting..." or "----" while waiting for relay
+   */
+  public ensureProvisionalSession(): void {
+    if (this.sessionId && this.pinCode) return;
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let id = 'GH-';
+    for (let i = 0; i < 4; i++) {
+      id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    this.sessionId = id;
+    this.pinCode = pin;
+
+    const host = window.location.origin;
+    this.events.onRegistered?.({
+      sessionId: id,
+      pinCode: pin,
+      pairingUrl: `${host}/?pair=${id}&pin=${pin}`,
+      qrPayload: JSON.stringify({
+        protocol: 'gamehub-v1',
+        type: 'pair',
+        sessionId: id,
+        pin,
+        host,
+      }),
+      stunServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ],
+    });
   }
 
   private scheduleReconnect() {
@@ -228,24 +271,30 @@ export class SignalingService {
   }
 
   private handleIncomingMessage(msg: SignalingMessage) {
-    switch (msg.type) {
-      case 'TV_REGISTERED': {
-        this.sessionId = msg.sessionId;
-        this.pinCode = msg.pinCode;
+    const anyMsg = msg as any;
+    switch (anyMsg.type as string) {
+      case 'TV_REGISTERED':
+      case 'REGISTERED':
+      case 'REGISTER_SUCCESS': {
+        const sid = anyMsg.sessionId || anyMsg.session_id || '';
+        const pin = anyMsg.pinCode || anyMsg.pin || anyMsg.code || '';
+        if (sid) this.sessionId = sid;
+        if (pin) this.pinCode = pin;
         this.events.onRegistered?.({
-          sessionId: msg.sessionId,
-          pinCode: msg.pinCode,
-          pairingUrl: msg.pairingUrl,
-          qrPayload: msg.qrPayload,
-          stunServers: msg.stunServers || [],
+          sessionId: this.sessionId || sid,
+          pinCode: this.pinCode || pin,
+          pairingUrl: anyMsg.pairingUrl || `${window.location.origin}/?pair=${this.sessionId}&pin=${this.pinCode}`,
+          qrPayload: anyMsg.qrPayload || JSON.stringify({ protocol: 'gamehub-v1', sessionId: this.sessionId, pin: this.pinCode }),
+          stunServers: anyMsg.stunServers || [],
         });
         break;
       }
 
       case 'PAIR_REQUEST': {
         this.events.onPairRequest?.({
-          deviceInfo: msg.deviceInfo,
-          pinCode: msg.pinCode,
+          deviceInfo: anyMsg.deviceInfo,
+          pinCode: anyMsg.pinCode,
+          sessionId: anyMsg.sessionId || this.sessionId || '',
         });
         break;
       }
@@ -256,22 +305,22 @@ export class SignalingService {
       }
 
       case 'SIGNAL_OFFER': {
-        this.events.onOfferReceived?.(msg.sdp);
+        this.events.onOfferReceived?.(anyMsg.sdp);
         break;
       }
 
       case 'SIGNAL_ANSWER': {
-        this.events.onAnswerReceived?.(msg.sdp);
+        this.events.onAnswerReceived?.(anyMsg.sdp);
         break;
       }
 
       case 'SIGNAL_ICE_CANDIDATE': {
-        this.events.onIceCandidateReceived?.(msg.candidate);
+        this.events.onIceCandidateReceived?.(anyMsg.candidate);
         break;
       }
 
       case 'GAME_LAUNCH_STATUS': {
-        this.events.onGameLaunchStatus?.(msg.payload);
+        this.events.onGameLaunchStatus?.(anyMsg.payload);
         break;
       }
 
@@ -282,30 +331,30 @@ export class SignalingService {
       }
 
       case 'CONTROLLER_INPUT': {
-        if ((msg as any).input) {
-          this.events.onControllerInput?.((msg as any).input);
-        } else {
-          this.events.onControllerInput?.((msg as any).payload ?? msg);
+        if (anyMsg.input) {
+          this.events.onControllerInput?.(anyMsg.input);
+        } else if (anyMsg.payload) {
+          this.events.onControllerInput?.(anyMsg.payload);
         }
         break;
       }
 
       case 'NAV_COMMAND': {
-        if ((msg as any).payload) {
-          this.events.onNavCommand?.((msg as any).payload);
-        } else {
-          this.events.onNavCommand?.((msg as any).command ?? msg);
+        if (anyMsg.payload) {
+          this.events.onNavCommand?.(anyMsg.payload);
+        } else if (anyMsg.command) {
+          this.events.onNavCommand?.(anyMsg.command);
         }
         break;
       }
 
       case 'DISCONNECT': {
-        this.events.onMobileDisconnected?.(msg.sender === 'mobile' ? 'Phone disconnected' : undefined);
+        this.events.onMobileDisconnected?.(anyMsg.sender === 'mobile' ? 'Phone disconnected' : undefined);
         break;
       }
 
       case 'ERROR': {
-        this.events.onError?.({ code: msg.code, message: msg.message });
+        this.events.onError?.({ code: anyMsg.code || 'ERROR', message: anyMsg.message || 'Error occurred' });
         break;
       }
 
@@ -317,12 +366,28 @@ export class SignalingService {
   /**
    * TV accepts mobile pairing request
    */
-  public acceptPairing(deviceInfo: DeviceInfo) {
-    if (!this.sessionId) return;
+  public acceptPairing(pinCodeOrDevInfo?: any, sessionId?: string) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!targetSessionId) return;
+
+    const pin = typeof pinCodeOrDevInfo === 'string' ? pinCodeOrDevInfo : (this.pinCode || '');
+    const devInfo: DeviceInfo =
+      typeof pinCodeOrDevInfo === 'object' && pinCodeOrDevInfo !== null
+        ? pinCodeOrDevInfo
+        : {
+            model: 'Mobile Controller',
+            platform: 'android',
+            appVersion: '1.0.0',
+            screenResolution: { width: 1080, height: 2400 },
+            batteryLevel: 100,
+            isCharging: false,
+          };
+
     this.send({
       type: 'PAIR_ACCEPT',
-      sessionId: this.sessionId,
+      sessionId: targetSessionId,
       sender: 'tv',
+      pinCode: pin,
       timestamp: Date.now(),
       token: `auth_${Date.now()}`,
       tvCapabilities: {
@@ -330,8 +395,8 @@ export class SignalingService {
         maxFps: 60,
         supportedCodecs: ['H264', 'VP8', 'VP9', 'AV1'],
       },
-    });
-    this.events.onPairAccepted?.(deviceInfo);
+    } as any);
+    this.events.onPairAccepted?.(devInfo);
   }
 
   /**
