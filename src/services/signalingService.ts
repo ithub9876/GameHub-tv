@@ -10,6 +10,7 @@ import {
   SignalingMessage,
   StreamQualityConfig,
 } from '../types/protocol';
+import { Peer } from 'peerjs';
 
 export type SignalingConnectionState =
   | 'DISCONNECTED'
@@ -55,6 +56,8 @@ export class SignalingService {
   private pingSequence: number = 0;
   private shouldAutoReconnect: boolean = true;
   private messageQueue: SignalingMessage[] = [];
+  private peer: any = null;
+  private peerPin: string | null = null;
 
   constructor(events?: Partial<SignalingEvents>) {
     if (events) {
@@ -185,6 +188,7 @@ export class SignalingService {
     this.pinCode = pin;
 
     const host = window.location.origin;
+    this.initPeerJS(pin);
     this.events.onRegistered?.({
       sessionId: id,
       pinCode: pin,
@@ -280,6 +284,9 @@ export class SignalingService {
         const pin = anyMsg.pinCode || anyMsg.pin || anyMsg.code || '';
         if (sid) this.sessionId = sid;
         if (pin) this.pinCode = pin;
+        if (this.pinCode) {
+          this.initPeerJS(this.pinCode);
+        }
         this.events.onRegistered?.({
           sessionId: this.sessionId || sid,
           pinCode: this.pinCode || pin,
@@ -520,6 +527,67 @@ export class SignalingService {
       this.ws.close();
       this.ws = null;
     }
+    if (this.peer) {
+      try {
+        this.peer.destroy();
+      } catch (_) {}
+      this.peer = null;
+      this.peerPin = null;
+    }
     this.setConnectionState('DISCONNECTED');
+  }
+
+  /**
+   * Initializes PeerJS direct peer-to-peer connection for controller input
+   */
+  private initPeerJS(pinCode?: string): void {
+    const pin = pinCode || this.pinCode;
+    if (!pin) return;
+    if (this.peerPin === pin && this.peer && !this.peer.destroyed) return;
+    this.peerPin = pin;
+
+    try {
+      if (this.peer) {
+        try {
+          this.peer.destroy();
+        } catch (_) {}
+        this.peer = null;
+      }
+
+      const PeerConstructor: any = Peer || (window as any).Peer;
+      if (!PeerConstructor) {
+        console.warn('[PeerJS] Peer constructor not found');
+        return;
+      }
+
+      const peer = new PeerConstructor('gh-' + pin, {
+        host: '0.peerjs.com',
+        port: 443,
+        secure: true,
+      });
+      this.peer = peer;
+
+      peer.on('open', (id: string) => {
+        console.log('[PeerJS] TV listening for peer connections on ID:', id);
+      });
+
+      peer.on('connection', (conn: any) => {
+        console.log('[PeerJS] Controller connected peer-to-peer!');
+        conn.on('data', (data: any) => {
+          if (data?.type === 'CONTROLLER_INPUT' && data.input) {
+            this.events.onControllerInput?.(data.input);
+          }
+          if (data?.type === 'NAV_COMMAND' && data.payload) {
+            this.events.onNavCommand?.(data.payload);
+          }
+        });
+      });
+
+      peer.on('error', (err: any) => {
+        console.warn('[PeerJS] Peer error:', err);
+      });
+    } catch (e) {
+      console.warn('[PeerJS] Init error:', e);
+    }
   }
 }
